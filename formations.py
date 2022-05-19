@@ -1,20 +1,12 @@
-# return a dictionary containing team information for each team
-# Valid lineups must contain 11 players and are limited to the following, shown as Keeper-Defenders-Midfielders-Strikers:
-# 1-3-5-2
-# 1-3-4-3
-# 1-4-4-2
-# 1-4-5-1
-# 1-4-3-3
-# 1-5-3-2
-# 1-5-4-1 
 import requests as r
+import random
+import json
 
 class Teams():
     formations = [(1,3,5,2),(1,3,4,3),(1,4,4,2),(1,4,5,1),(1,4,3,3),(1,5,3,2),(1,5,4,1)]
+    formation_index = { "Keeper": 0,  "Defender": 1, "Midfielder": 2, "Striker": 3}
     def __init__(self) -> None:
-        self.teams = {}
-        self.suspended = set()
-        self.injured = set()
+        pass
 
     def get_data(self, url):
         data = r.get(url)
@@ -25,18 +17,17 @@ class Teams():
 
     def get_teams(self, url):
         players = self.get_data(url)
-        # players = the list "Players" from the API 
         for p in players:
-            # p = the object with the attributes {first_name...}
+            team_name = p['team']
             player = Player(p['first_name'], p['last_name'], p['injured'],p['position'], p['suspended'])
-            team = Team(p['team'])
-            if p['team'] not in self.teams.keys():
+            if team_name not in vars(self):
+                team = Team(p['team'])
                 self.add_team(team)
-            self.teams[p['team']].add_player(player)
-            self.teams[p['team']].add_player_to_position(player)
+            getattr(self,team_name).add_player(player)
+            getattr(self,team_name).add_player_to_position(player)
     
     def add_team(self, team):
-        self.teams[team.name] = team
+        setattr(self,team.name, team)
 
     def display_teams(self):
         for team_name in self.teams:
@@ -58,26 +49,56 @@ class Teams():
                     print(player.name, end=", ")
                 print()
 
+    def get_formation_results(self):
+        results = []
+        teams = {}
+        # for each team
+        for team_name in vars(self):
+            team = getattr(self,team_name)
+            # compare the position set minus suspended and injured 
+            for formation in self.formations: #[(1,3,5,2)...]
+                formation_available = True
+                for position in team.positions: # position: "Keeper, etc"
+                    available_positions = team.positions[position] - team.suspended - team.injured
+            # with the formation possibilities saving to available formations
+                    if(formation[self.formation_index[position]] > len(team.positions[position])):
+                        formation_available = False
+                        break
+                if formation_available:
+                    results.append("-".join([str(x) for x in formation]))
+            teams[team_name] = results
+        return teams
+        
+    def post_results(self,url):        
+        Teams = {}
+        formation_results = self.get_formation_results()
+        for fr in formation_results:
+            Teams[fr] = random.choice(formation_results[fr])
+        # x = r.post(url,data)
+        return json.dumps(Teams, indent=4)
+ 
 class Team():
     def __init__(self, name) -> None:
         self.name = name
         self.players = set()
         self.positions = {"Keeper":set(), "Defender":set(),"Midfielder":set(),"Striker":set()}
+        self.suspended = set()
+        self.injured = set()
 
     def add_player(self,player):
         self.players.add(player)
 
-    def check_formation(self):
+    def playable_formations(self):
         pass
     
     def add_player_to_position(self,player):
         self.positions[player.position].add(player)
     
     def add_player_to_injured(self,player):
-        self.positions[player.position].add(player)
+        self.injured.add(player)
     
     def add_player_to_suspended(self,player):
-        self.positions[player.position].add(player)
+        self.suspended.add(player)
         
 class Player():
     def __init__(self, first_name, last_name, injured, position, suspended) -> None:
@@ -87,8 +108,8 @@ class Player():
         self.suspended = suspended
 
 
-
 teams = Teams()
 teams.get_teams('https://foxes90-prempundit.herokuapp.com/players')
-teams.display_teams()
+print(teams.post_results("some_url"))
+
 
